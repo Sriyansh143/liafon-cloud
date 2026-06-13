@@ -1,1 +1,56 @@
-Nothing should be ignored since only markdown documentation files were added (.md files), which are source/config files and not build artifacts, dependencies, or temp files.
+```
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# IDE files
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.local
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# MyPy cache
+.mypy_cache/
+# PyTest cache
+.pytest_cache/
+```
