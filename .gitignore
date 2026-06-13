@@ -1,1 +1,25 @@
-Nothing should be ignored since only markdown documentation files were added (.md files), which are source/config files and not build artifacts, dependencies, or temp files.
+```
+# Dependencies
+.pub/
+.dart_tool/
+build/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+```
