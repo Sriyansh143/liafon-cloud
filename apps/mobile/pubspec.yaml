@@ -62,6 +62,10 @@ dependencies:
   google_mlkit_text_recognition: ^0.11.0
   image_picker: ^1.0.7
   
+
+  # Edge AI & Machine Learning (FREE - Local TFLite)
+  tflite_flutter: ^0.11.0
+  vector_math_64: ^2.1.1
   # PDF Generation (FREE - Local)
   pdf: ^3.10.7
   printing: ^5.12.0
