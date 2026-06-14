@@ -136,6 +136,53 @@ liafon-cloud/
 - Redis (optional)
 - Ollama (optional, for real AI)
 
+
+## Microservices Detail
+
+Three isolated Python microservices for heavy ML/AI processing:
+
+| Service | Port | Purpose | Dependencies |
+|---------|------|---------|--------------|
+| **AI Chat** | 5000 | Health companion with memory | Ollama, Llama 3.1 |
+| **OCR** | 5001 | Prescription scanning | PaddleOCR |
+| **Voice** | 5002 | Speech-to-text & TTS | Whisper, Coqui TTS |
+
+### Microservices Quick Start
+
+```bash
+# Install dependencies
+pip install -r backend/services/ai-chat/requirements.txt
+pip install -r backend/services/ocr/requirements.txt
+pip install -r backend/services/voice/requirements.txt
+
+# Run services (separate terminals)
+python backend/services/ai-chat/app.py &    # Port 5000
+python backend/services/ocr/app.py &        # Port 5001
+python backend/services/voice/app.py &      # Port 5002
+```
+
+### Test Microservices Directly
+
+```bash
+# AI Chat
+curl -X POST http://localhost:5000/api/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello!"}]}'
+
+# OCR
+curl -X POST http://localhost:5001/api/ocr/extract \
+  -F "image=@test.jpg"
+
+# Voice Transcribe
+curl -X POST http://localhost:5002/api/voice/transcribe \
+  -F "audio=@test.wav"
+
+# Voice Synthesize
+curl -X POST http://localhost:5002/api/voice/synthesize \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello"}' --output out.wav
+```
+
 ## License
 
 MIT
