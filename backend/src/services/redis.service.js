@@ -5,6 +5,8 @@ class RedisService {
   constructor() {
     this.client = null;
     this.isConnected = false;
+    this.retryCount = 0;
+    this.maxRetries = 3;
   }
 
   async connect() {
@@ -12,10 +14,21 @@ class RedisService {
       const host = process.env.REDIS_HOST || 'localhost';
       const port = parseInt(process.env.REDIS_PORT) || 6379;
       const password = process.env.REDIS_PASSWORD || undefined;
+      const db = parseInt(process.env.REDIS_DB) || 0;
 
       this.client = createClient({
-        url: `redis://${host}:${port}`,
-        password
+        url: `redis://${host}:${port}/${db}`,
+        password,
+        socket: {
+          reconnectStrategy: (retries) => {
+            if (retries > this.maxRetries) {
+              logger.error('Max Redis reconnection attempts reached');
+              return new Error('Redis max retries reached');
+            }
+            return Math.min(retries * 50, 2000);
+          },
+          connectTimeout: 10000
+        }
       });
 
       this.client.on('error', (err) => {
@@ -23,9 +36,13 @@ class RedisService {
         this.isConnected = false;
       });
 
+      this.client.on('connect', () => {
+        logger.info('Redis client connected successfully');
+        this.isConnected = true;
+        this.retryCount = 0;
+      });
+
       await this.client.connect();
-      this.isConnected = true;
-      logger.info('Redis connection established');
       
       return this.client;
     } catch (error) {
@@ -39,6 +56,17 @@ class RedisService {
       throw new Error('Redis not connected');
     }
     return this.client;
+  }
+
+  // Health check with ping
+  async ping() {
+    try {
+      const result = await this.client.ping();
+      return result === 'PONG';
+    } catch (error) {
+      logger.error('Redis ping failed:', error);
+      throw error;
+    }
   }
 
   // Cache operations
