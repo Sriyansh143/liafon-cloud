@@ -1,9 +1,0 @@
-[submodule "backend/services/ai-chat"]
-	path = backend/services/ai-chat
-	url = https://github.com/Sriyansh143/liafon-ai-chat
-[submodule "backend/services/ocr"]
-	path = backend/services/ocr
-	url = https://github.com/Sriyansh143/liafon-ocr
-[submodule "backend/services/voice"]
-	path = backend/services/voice
-	url = https://github.com/Sriyansh143/liafon-voice
