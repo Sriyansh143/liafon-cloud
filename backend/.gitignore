@@ -1,0 +1,35 @@
+```
+# Dependencies
+.pub/
+.dart_tool/
+build/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore local database and AI model binaries
+backend/liafon-api/liafon-stack/data/ollama/
+backend/liafon-api/liafon-stack/data/pocketbase/
+backend/liafon-api/liafon-stack/data/n8n/
+
+# Ignore heavy binary blobs and manifests anywhere in the project
+*.blob
+**/blobs/
+**/manifests/
+```
