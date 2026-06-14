@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - AI_CHAT_SERVICE_URL=http://liafon-ai-chat:3001
+      - OCR_SERVICE_URL=http://liafon-ocr:3002
+      - VOICE_SERVICE_URL=http://liafon-voice:3003
+    volumes:
+      - ./uploads:/app/uploads
+    restart: always
+
+  liafon-ai-chat:
+    build:
+      context: ./services/ai-chat
+      dockerfile: dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    restart: always
+
+  liafon-ocr:
+    build:
+      context: ./services/ocr
+      dockerfile: dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+    restart: always
+
+  liafon-voice:
+    build:
+      context: ./services/voice
+      dockerfile: dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+    restart: always
