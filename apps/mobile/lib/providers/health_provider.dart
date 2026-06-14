@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 
 class HealthMetric {
@@ -56,12 +58,30 @@ class HealthProvider extends ChangeNotifier {
   Duration _lightSleep = Duration.zero;
   Duration _remSleep = Duration.zero;
   
-  // Historical data
-  List<HealthMetric> _metricsHistory = [];
-  Map<String, List<HealthMetric>> _metricsByType = {};
+  // Historical data - Using circular buffer for O(1) operations
+  static const int _maxMetrics = 1000;
+  final Queue<HealthMetric> _metricsHistory = Queue(capacity: _maxMetrics);
+  final Map<String, Queue<HealthMetric>> _metricsByType = {};
   
   // Health score (0-100)
   int _healthScore = 0;
+  
+  // Throttling for UI updates
+  Timer? _notifyTimer;
+  bool _pendingNotify = false;
+  static const Duration _notifyThrottle = Duration(seconds: 5);
+  
+  // Dirty flags for selective health score calculation
+  bool _heartRateDirty = false;
+  bool _spo2Dirty = false;
+  bool _bodyTempDirty = false;
+  bool _sleepScoreDirty = false;
+  
+  // Cached health score components
+  int _cachedHeartRateScore = 0;
+  int _cachedSpo2Score = 0;
+  int _cachedBodyTempScore = 0;
+  int _cachedSleepScoreComponent = 0;
   
   // Getters
   int get heartRate => _heartRate;
@@ -75,12 +95,13 @@ class HealthProvider extends ChangeNotifier {
   Duration get deepSleep => _deepSleep;
   Duration get lightSleep => _lightSleep;
   Duration get remSleep => _remSleep;
-  List<HealthMetric> get metricsHistory => _metricsHistory;
+  List<HealthMetric> get metricsHistory => _metricsHistory.toList();
   int get healthScore => _healthScore;
   
   // Update heart rate
   void updateHeartRate(int bpm) {
     _heartRate = bpm;
+    _heartRateDirty = true;
     _addMetric(HealthMetric(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'heart_rate',
@@ -89,12 +110,13 @@ class HealthProvider extends ChangeNotifier {
       timestamp: DateTime.now(),
     ));
     _calculateHealthScore();
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update SpO2
   void updateSpo2(int percentage) {
     _spo2 = percentage;
+    _spo2Dirty = true;
     _addMetric(HealthMetric(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'spo2',
@@ -103,12 +125,13 @@ class HealthProvider extends ChangeNotifier {
       timestamp: DateTime.now(),
     ));
     _calculateHealthScore();
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update body temperature
   void updateBodyTemp(double temp) {
     _bodyTemp = temp;
+    _bodyTempDirty = true;
     _addMetric(HealthMetric(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'body_temp',
@@ -117,7 +140,7 @@ class HealthProvider extends ChangeNotifier {
       timestamp: DateTime.now(),
     ));
     _calculateHealthScore();
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update steps
@@ -130,8 +153,7 @@ class HealthProvider extends ChangeNotifier {
       unit: 'steps',
       timestamp: DateTime.now(),
     ));
-    _calculateHealthScore();
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update distance
@@ -144,7 +166,7 @@ class HealthProvider extends ChangeNotifier {
       unit: 'km',
       timestamp: DateTime.now(),
     ));
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update calories
@@ -157,7 +179,7 @@ class HealthProvider extends ChangeNotifier {
       unit: 'kcal',
       timestamp: DateTime.now(),
     ));
-    notifyListeners();
+    _scheduleNotify();
   }
   
   // Update sleep data
@@ -173,6 +195,7 @@ class HealthProvider extends ChangeNotifier {
     _deepSleep = deep;
     _lightSleep = light;
     _remSleep = rem;
+    _sleepScoreDirty = true;
     
     _addMetric(HealthMetric(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -188,70 +211,125 @@ class HealthProvider extends ChangeNotifier {
       },
     ));
     _calculateHealthScore();
-    notifyListeners();
+    _scheduleNotify();
   }
   
-  // Add metric to history
+  // Schedule throttled notifyListeners call
+  void _scheduleNotify() {
+    _pendingNotify = true;
+    
+    if (_notifyTimer == null || !_notifyTimer!.isActive) {
+      _notifyTimer = Timer(_notifyThrottle, () {
+        if (_pendingNotify) {
+          _pendingNotify = false;
+          notifyListeners();
+        }
+      });
+    }
+  }
+  
+  // Add metric to history - O(1) operations with circular buffer
   void _addMetric(HealthMetric metric) {
     _metricsHistory.add(metric);
     
     if (!_metricsByType.containsKey(metric.type)) {
-      _metricsByType[metric.type] = [];
+      _metricsByType[metric.type] = Queue(capacity: _maxMetrics);
     }
     _metricsByType[metric.type]!.add(metric);
     
-    // Keep only last 1000 metrics in memory
-    if (_metricsHistory.length > 1000) {
-      _metricsHistory.removeAt(0);
+    // Keep only last 1000 metrics per type (O(1) removal from front)
+    if (_metricsHistory.length > _maxMetrics) {
+      _metricsHistory.removeFirst();
+    }
+    
+    // Also limit per-type queues
+    if (_metricsByType[metric.type]!.length > _maxMetrics) {
+      _metricsByType[metric.type]!.removeFirst();
     }
   }
   
-  // Calculate overall health score (0-100)
+  // Calculate overall health score with selective updates (dirty flag pattern)
   void _calculateHealthScore() {
     int score = 0;
     int factors = 0;
     
-    // Heart rate scoring (normal: 60-100 bpm)
+    // Heart rate scoring - only recalculate if dirty
+    if (_heartRateDirty || _cachedHeartRateScore == 0) {
+      if (_heartRate > 0) {
+        if (_heartRate >= 60 && _heartRate <= 100) {
+          _cachedHeartRateScore = 25;
+        } else if (_heartRate >= 50 && _heartRate < 60 || 
+                   _heartRate > 100 && _heartRate <= 110) {
+          _cachedHeartRateScore = 15;
+        } else {
+          _cachedHeartRateScore = 5;
+        }
+      } else {
+        _cachedHeartRateScore = 0;
+      }
+      _heartRateDirty = false;
+    }
+    
     if (_heartRate > 0) {
-      if (_heartRate >= 60 && _heartRate <= 100) {
-        score += 25;
-      } else if (_heartRate >= 50 && _heartRate < 60 || 
-                 _heartRate > 100 && _heartRate <= 110) {
-        score += 15;
-      } else {
-        score += 5;
-      }
+      score += _cachedHeartRateScore;
       factors++;
     }
     
-    // SpO2 scoring (normal: 95-100%)
+    // SpO2 scoring - only recalculate if dirty
+    if (_spo2Dirty || _cachedSpo2Score == 0) {
+      if (_spo2 > 0) {
+        if (_spo2 >= 95) {
+          _cachedSpo2Score = 25;
+        } else if (_spo2 >= 90) {
+          _cachedSpo2Score = 15;
+        } else {
+          _cachedSpo2Score = 5;
+        }
+      } else {
+        _cachedSpo2Score = 0;
+      }
+      _spo2Dirty = false;
+    }
+    
     if (_spo2 > 0) {
-      if (_spo2 >= 95) {
-        score += 25;
-      } else if (_spo2 >= 90) {
-        score += 15;
-      } else {
-        score += 5;
-      }
+      score += _cachedSpo2Score;
       factors++;
     }
     
-    // Body temperature scoring (normal: 36.1-37.2°C)
+    // Body temperature scoring - only recalculate if dirty
+    if (_bodyTempDirty || _cachedBodyTempScore == 0) {
+      if (_bodyTemp > 0) {
+        if (_bodyTemp >= 36.1 && _bodyTemp <= 37.2) {
+          _cachedBodyTempScore = 25;
+        } else if (_bodyTemp >= 35.5 && _bodyTemp < 36.1 || 
+                   _bodyTemp > 37.2 && _bodyTemp <= 38) {
+          _cachedBodyTempScore = 15;
+        } else {
+          _cachedBodyTempScore = 5;
+        }
+      } else {
+        _cachedBodyTempScore = 0;
+      }
+      _bodyTempDirty = false;
+    }
+    
     if (_bodyTemp > 0) {
-      if (_bodyTemp >= 36.1 && _bodyTemp <= 37.2) {
-        score += 25;
-      } else if (_bodyTemp >= 35.5 && _bodyTemp < 36.1 || 
-                 _bodyTemp > 37.2 && _bodyTemp <= 38) {
-        score += 15;
-      } else {
-        score += 5;
-      }
+      score += _cachedBodyTempScore;
       factors++;
     }
     
-    // Sleep score
+    // Sleep score - only recalculate if dirty
+    if (_sleepScoreDirty || _cachedSleepScoreComponent == 0) {
+      if (_sleepScore > 0) {
+        _cachedSleepScoreComponent = (_sleepScore * 0.25).round();
+      } else {
+        _cachedSleepScoreComponent = 0;
+      }
+      _sleepScoreDirty = false;
+    }
+    
     if (_sleepScore > 0) {
-      score += (_sleepScore * 0.25).round();
+      score += _cachedSleepScoreComponent;
       factors++;
     }
     
@@ -259,29 +337,48 @@ class HealthProvider extends ChangeNotifier {
     _healthScore = factors > 0 ? (score / factors).round() : 0;
   }
   
-  // Get metrics by type
+  // Get metrics by type - returns cached list view
   List<HealthMetric> getMetricsByType(String type) {
-    return _metricsByType[type] ?? [];
+    final queue = _metricsByType[type];
+    return queue?.toList() ?? [];
   }
   
-  // Get metrics for last N hours
+  // Get metrics for last N hours - optimized with early exit
   List<HealthMetric> getMetricsForLastHours(String type, int hours) {
     final now = DateTime.now();
     final cutoff = now.subtract(Duration(hours: hours));
     
-    return getMetricsByType(type)
-        .where((m) => m.timestamp.isAfter(cutoff))
-        .toList();
+    final metrics = getMetricsByType(type);
+    if (metrics.isEmpty) return [];
+    
+    // Find index where we can stop (metrics are in chronological order)
+    int startIndex = 0;
+    for (int i = 0; i < metrics.length; i++) {
+      if (metrics[i].timestamp.isAfter(cutoff)) {
+        startIndex = i;
+        break;
+      }
+      // If we're still before cutoff, continue
+      if (i == metrics.length - 1) {
+        // All metrics are before cutoff
+        return [];
+      }
+    }
+    
+    // Return sublist (more efficient than where+toList)
+    return metrics.skipWhile((m) => !m.timestamp.isAfter(cutoff)).toList();
   }
   
-  // Get today's metrics
+  // Get today's metrics - optimized version
   List<HealthMetric> getTodayMetrics(String type) {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     
-    return getMetricsByType(type)
-        .where((m) => m.timestamp.isAfter(startOfDay))
-        .toList();
+    final metrics = getMetricsByType(type);
+    if (metrics.isEmpty) return [];
+    
+    // Return sublist from first metric after startOfDay
+    return metrics.skipWhile((m) => !m.timestamp.isAfter(startOfDay)).toList();
   }
   
   // Clear all data
@@ -300,6 +397,27 @@ class HealthProvider extends ChangeNotifier {
     _metricsHistory.clear();
     _metricsByType.clear();
     _healthScore = 0;
+    
+    // Reset dirty flags and caches
+    _heartRateDirty = false;
+    _spo2Dirty = false;
+    _bodyTempDirty = false;
+    _sleepScoreDirty = false;
+    _cachedHeartRateScore = 0;
+    _cachedSpo2Score = 0;
+    _cachedBodyTempScore = 0;
+    _cachedSleepScoreComponent = 0;
+    
+    // Cancel pending notifications
+    _notifyTimer?.cancel();
+    _pendingNotify = false;
+    
     notifyListeners();
+  }
+  
+  @override
+  void dispose() {
+    _notifyTimer?.cancel();
+    super.dispose();
   }
 }

@@ -61,8 +61,8 @@ router.post('/sync', validateHealthMetric, async (req, res, next) => {
 router.get('/metrics', validatePagination, async (req, res, next) => {
   try {
     const userId = req.user?.id || 'demo-user';
-    const page = req.query.page || 1;
-    const perPage = req.query.perPage || 20;
+    const page = parseInt(req.query.page) || 1;
+    const perPage = Math.min(parseInt(req.query.perPage) || 20, 100); // Hard limit of 100
 
     // Try cache first
     let metrics = await redisService.getCachedHealthMetrics(userId);
