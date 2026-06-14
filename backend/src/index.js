@@ -11,8 +11,6 @@ import { fileURLToPath } from 'url';
 // Import routes
 import healthRoutes from './routes/health.routes.js';
 import aiRoutes from './routes/ai.routes.js';
-import voiceRoutes from './routes/voice.routes.js';
-import emergencyRoutes from './routes/emergency.routes.js';
 import marketplaceRoutes from './routes/marketplace.routes.js';
 import pointsRoutes from './routes/points.routes.js';
 import authRoutes from './routes/auth.routes.js';
@@ -78,8 +76,6 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/health', healthRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/voice', voiceRoutes);
-app.use('/api/emergency', emergencyRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/points', pointsRoutes);
 app.use('/api/auth', authRoutes);
