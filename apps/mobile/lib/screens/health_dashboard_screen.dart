@@ -287,6 +287,9 @@ class HealthDashboardScreen extends StatelessWidget {
   }
   
   Widget _buildHeartRateChart(HealthProvider provider) {
+    // Cache chart spots to avoid regeneration on every build
+    final spots = _getCachedHeartRateSpots(provider);
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -299,7 +302,7 @@ class HealthDashboardScreen extends StatelessWidget {
               borderData: FlBorderData(show: false),
               lineBarsData: [
                 LineChartBarData(
-                  spots: _generateSampleSpots(),
+                  spots: spots,
                   isCurved: true,
                   color: Colors.red,
                   barWidth: 3,
@@ -317,15 +320,64 @@ class HealthDashboardScreen extends StatelessWidget {
     );
   }
   
-  List<FlSpot> _generateSampleSpots() {
+  // Cached spots for heart rate chart - memoized
+  List<FlSpot>? _cachedSpots;
+  DateTime? _lastCacheTime;
+  static const Duration _cacheDuration = Duration(minutes: 5);
+  
+  List<FlSpot> _getCachedHeartRateSpots(HealthProvider provider) {
     final now = DateTime.now();
+    
+    // Return cached if still valid
+    if (_cachedSpots != null && 
+        _lastCacheTime != null && 
+        now.difference(_lastCacheTime!) < _cacheDuration) {
+      return _cachedSpots!;
+    }
+    
+    // Generate new spots from actual provider data
+    final metrics = provider.getMetricsByType('heart_rate');
     final spots = <FlSpot>[];
     
-    for (int i = 0; i < 24; i++) {
-      final hour = i.toDouble();
-      final value = 60 + (i % 5).toDouble() * 5; // Sample data
-      spots.add(FlSpot(hour, value));
+    if (metrics.isEmpty) {
+      // Fallback to sample data if no real data
+      for (int i = 0; i < 24; i++) {
+        final hour = i.toDouble();
+        final value = 60 + (i % 5).toDouble() * 5;
+        spots.add(FlSpot(hour, value));
+      }
+    } else {
+      // Use actual metric data
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      
+      // Group by hour and average
+      Map<int, List<double>> hourlyData = {};
+      for (var metric in metrics) {
+        if (metric.timestamp.isAfter(startOfDay)) {
+          final hour = metric.timestamp.hour;
+          hourlyData.putIfAbsent(hour, () => []);
+          hourlyData[hour]!.add(metric.value);
+        }
+      }
+      
+      // Create spots from averaged hourly data
+      for (int hour = 0; hour < 24; hour++) {
+        final values = hourlyData[hour];
+        double value;
+        if (values != null && values.isNotEmpty) {
+          value = values.reduce((a, b) => a + b) / values.length;
+        } else {
+          // Interpolate or use default
+          value = 60 + (hour % 5) * 5;
+        }
+        spots.add(FlSpot(hour.toDouble(), value));
+      }
     }
+    
+    // Cache the result
+    _cachedSpots = spots;
+    _lastCacheTime = now;
     
     return spots;
   }

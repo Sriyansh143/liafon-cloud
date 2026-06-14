@@ -9,8 +9,15 @@ class BluetoothProvider extends ChangeNotifier {
   bool _isConnected = false;
   BluetoothDevice? _connectedDevice;
   List<BluetoothDevice> _availableDevices = [];
+  Set<String> _deviceIds = {}; // O(1) lookup for duplicate checking
   List<BluetoothService> _services = [];
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
+  StreamSubscription<ScanResult>? _scanSubscription;
+  
+  // Throttling for scan results
+  Timer? _scanThrottleTimer;
+  bool _pendingScanUpdate = false;
+  static const Duration _scanThrottle = Duration(milliseconds: 500);
   
   // Getters
   bool get isScanning => _isScanning;
@@ -69,12 +76,13 @@ class BluetoothProvider extends ChangeNotifier {
     }
   }
   
-  // Start scanning for devices
+  // Start scanning for devices with throttling
   Future<void> startScan({Duration duration = const Duration(seconds: 10)}) async {
     if (_isScanning) return;
     
     try {
       _availableDevices.clear();
+      _deviceIds.clear();
       _isScanning = true;
       notifyListeners();
       
@@ -84,26 +92,29 @@ class BluetoothProvider extends ChangeNotifier {
         removeIfGone: const Duration(seconds: 5),
       );
       
-      // Listen for scan results
-      _flutterBlue.scanResults.listen(
+      // Listen for scan results with throttling
+      _scanSubscription?.cancel();
+      _scanSubscription = _flutterBlue.scanResults.listen(
         (scanResult) {
           final device = scanResult.device;
           
-          // Filter for smartwatch devices (you can customize this)
-          if (device.name.isNotEmpty && 
-              !_availableDevices.any((d) => d.id == device.id)) {
+          // O(1) lookup using Set instead of O(n) linear search
+          if (device.name.isNotEmpty && !_deviceIds.contains(device.id)) {
             _availableDevices.add(device);
-            notifyListeners();
+            _deviceIds.add(device.id);
+            
+            // Throttle UI updates to avoid excessive rebuilds
+            _scheduleScanUpdate();
           }
         },
         onDone: () {
           _isScanning = false;
-          notifyListeners();
+          _flushScanUpdate();
         },
         onError: (error) {
           debugPrint('Scan error: $error');
           _isScanning = false;
-          notifyListeners();
+          _flushScanUpdate();
         },
       );
     } catch (e) {
@@ -112,6 +123,27 @@ class BluetoothProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+  
+  // Schedule throttled scan update
+  void _scheduleScanUpdate() {
+    _pendingScanUpdate = true;
+    
+    if (_scanThrottleTimer == null || !_scanThrottleTimer!.isActive) {
+      _scanThrottleTimer = Timer(_scanThrottle, () {
+        _flushScanUpdate();
+      });
+    }
+  }
+  
+  // Flush pending scan update
+  void _flushScanUpdate() {
+    if (_pendingScanUpdate) {
+      _pendingScanUpdate = false;
+      notifyListeners();
+    }
+    _isScanning = false;
+    notifyListeners();
   }
   
   // Stop scanning
@@ -228,6 +260,8 @@ class BluetoothProvider extends ChangeNotifier {
   @override
   void dispose() {
     _connectionSubscription?.cancel();
+    _scanSubscription?.cancel();
+    _scanThrottleTimer?.cancel();
     _flutterBlue.stopScan();
     disconnect();
     super.dispose();

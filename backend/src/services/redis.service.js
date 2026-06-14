@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import crypto from 'crypto';
 import logger from '../utils/logger.js';
 
 class RedisService {
@@ -94,7 +95,7 @@ class RedisService {
     return await this.get(key);
   }
 
-  // AI response cache
+  // AI response cache - using crypto for efficient hashing
   async cacheAIResponse(prompt, response, ttl = 3600) {
     const key = `ai:response:${this.hash(prompt)}`;
     return await this.set(key, response, ttl);
@@ -140,15 +141,9 @@ class RedisService {
     return await this.get(key);
   }
 
-  // Helper method to hash strings for cache keys
+  // Optimized hash function using Node.js crypto module
   hash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
+    return crypto.createHash('md5').update(str).digest('hex');
   }
 
   async disconnect() {
