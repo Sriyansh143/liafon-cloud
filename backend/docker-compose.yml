@@ -20,7 +20,7 @@ services:
   liafon-ai-chat:
     build:
       context: ./services/ai-chat
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
@@ -31,7 +31,7 @@ services:
   liafon-ocr:
     build:
       context: ./services/ocr
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     ports:
       - "3002:3002"
     environment:
@@ -42,7 +42,7 @@ services:
   liafon-voice:
     build:
       context: ./services/voice
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     ports:
       - "3003:3003"
     environment:
