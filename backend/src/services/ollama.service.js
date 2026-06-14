@@ -21,7 +21,7 @@ class OllamaService {
     }
   }
 
-  // Chat with AI assistant
+  // Chat with AI assistant - with intelligent fallback to NVIDIA NIM
   async chat(messages, options = {}) {
     try {
       const { stream = false, temperature = 0.7, maxTokens = 2048 } = options;
@@ -49,10 +49,40 @@ class OllamaService {
       return {
         role: 'assistant',
         content: response.data.message.content,
-        done: response.data.done
+        done: response.data.done,
+        source: 'ollama'
       };
     } catch (error) {
       logger.error('Ollama chat error:', error.message);
+      
+      // Fallback to NVIDIA NIM if enabled and Ollama fails
+      if (this.nimFallback && this.nimEnabled) {
+        try {
+          logger.warn('Falling back to NVIDIA NIM...');
+          const lastMessage = messages[messages.length - 1]?.content || '';
+          const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
+          
+          const nimResponse = await this.nimFallback.chat({
+            message: lastMessage,
+            model: 'llama3-8b',
+            systemPrompt,
+            temperature
+          });
+          
+          return {
+            role: 'assistant',
+            content: nimResponse.response,
+            done: true,
+            source: 'nvidia-nim',
+            cached: nimResponse.cached,
+            timeMs: nimResponse.timeMs
+          };
+        } catch (nimError) {
+          logger.error('NVIDIA NIM fallback also failed:', nimError.message);
+          throw new Error(`AI chat failed: ${error.message} (NIM fallback also failed: ${nimError.message})`);
+        }
+      }
+      
       throw new Error(`AI chat failed: ${error.message}`);
     }
   }
