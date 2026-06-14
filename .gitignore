@@ -1,35 +1,38 @@
-```
 # Dependencies
 node_modules/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+target/
+.gradle/
 
-# Environment variables
+# Environment
 .env
 .env.local
 .env.*
 
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
 # Logs
 *.log
 
-# Temporary files
-*.tmp
-*.swp
+# OS
+.DS_Store
+Thumbs.db
 
-# Build outputs
-dist/
-build/
-target/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.ENV
-.python-version
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
 # Compressed files
 *.zip
@@ -50,34 +53,7 @@ venv/
 *.Z
 *.lz
 *.lzo
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# IDE specific
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# MyPy cache
-.mypy_cache/
-# Pytest cache
-.pytest_cache/
-
-# Gradle
-.gradle/
-
-# Compiled Binary files
-*.exe
-*.dll
-*.so
-*.a
-*.out
-```
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
